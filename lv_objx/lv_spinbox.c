@@ -1,12 +1,5 @@
 /**
- * @file lv_templ.c
- *
- */
-
-/* TODO Remove these instructions
- * Search an replace: spinbox -> object normal name with lower case (e.g. button, label etc.)
- *                    templ -> object short name with lower case(e.g. btn, label etc)
- *                    TEMPL -> object short name with upper case (e.g. BTN, LABEL etc.)
+ * @file lv_spinbox.c
  *
  */
 
@@ -28,11 +21,8 @@
 /**********************
  *  STATIC PROTOTYPES
  **********************/
-static bool lv_spinbox_design(lv_obj_t * templ, const lv_area_t * mask, lv_design_mode_t mode);
 static lv_res_t lv_spinbox_signal(lv_obj_t * spinbox, lv_signal_t sign, void * param);
 static void lv_spinbox_updatevalue(lv_obj_t * spinbox);
-static int32_t lv_spinbox_double_to_int(lv_obj_t * spinbox, double d);
-static double lv_spinbox_int_to_double(lv_obj_t * spinbox, int32_t i);
 
 /**********************
  *  STATIC VARIABLES
@@ -56,271 +46,290 @@ static lv_design_func_t ancestor_design;
  */
 lv_obj_t * lv_spinbox_create(lv_obj_t * par, const lv_obj_t * copy)
 {
-	LV_LOG_TRACE("spinbox create started");
+    LV_LOG_TRACE("spinbox create started");
 
-	/*Create the ancestor of spinbox*/
-	/*TODO modify it to the ancestor create function */
-	lv_obj_t * new_spinbox = lv_ta_create(par, copy);
-	lv_mem_assert(new_spinbox);
-	if(new_spinbox == NULL) return NULL;
+    /*Create the ancestor of spinbox*/
+    lv_obj_t * new_spinbox = lv_ta_create(par, copy);
+    lv_mem_assert(new_spinbox);
+    if(new_spinbox == NULL) return NULL;
 
-	/*Allocate the spinbox type specific extended data*/
-	lv_spinbox_ext_t * ext = lv_obj_allocate_ext_attr(new_spinbox, sizeof(lv_spinbox_ext_t));
-	lv_mem_assert(ext);
-	if(ext == NULL) return NULL;
-	if(ancestor_signal == NULL) ancestor_signal = lv_obj_get_signal_func(new_spinbox);
-	if(ancestor_design == NULL) ancestor_design = lv_obj_get_design_func(new_spinbox);
+    /*Allocate the spinbox type specific extended data*/
+    lv_spinbox_ext_t * ext = lv_obj_allocate_ext_attr(new_spinbox, sizeof(lv_spinbox_ext_t));
+    lv_mem_assert(ext);
+    if(ext == NULL) return NULL;
+    if(ancestor_signal == NULL) ancestor_signal = lv_obj_get_signal_func(new_spinbox);
+    if(ancestor_design == NULL) ancestor_design = lv_obj_get_design_func(new_spinbox);
 
-	/*Initialize the allocated 'ext' */
-	ext->ta.one_line = 1;
-	ext->ta.pwd_mode = 0;
-	ext->ta.accapted_chars = "1234567890+-.";
+    /*Initialize the allocated 'ext'*/
+    ext->ta.one_line = 1;
+    ext->ta.pwd_mode = 0;
+    ext->ta.accapted_chars = "1234567890+-.";
 
-	ext->value = 0.0;
-	ext->valueDigit = 0;
-	ext->decPointPos = 2;
-	ext->digitCount = 5;
-	ext->step = 100;
-	ext->rangeMax = 99999;
-	ext->rangeMin = -99999;
+    ext->value = 0;
+    ext->dec_point_pos = 2;
+    ext->digit_count = 5;
+    ext->step = 100;
+    ext->range_max = 99999;
+    ext->range_min = -99999;
+    ext->value_changed_cb = NULL;
 
-	lv_ta_set_cursor_type(new_spinbox, LV_CURSOR_BLOCK | LV_CURSOR_HIDDEN); //hidden by default
-	lv_ta_set_cursor_pos(new_spinbox, 4);
+    lv_ta_set_cursor_type(new_spinbox, LV_CURSOR_BLOCK | LV_CURSOR_HIDDEN); /*hidden by default*/
+    lv_ta_set_cursor_pos(new_spinbox, 4);
 
 
-	/*The signal and design functions are not copied so set them here*/
-	lv_obj_set_signal_func(new_spinbox, lv_spinbox_signal);
-	lv_obj_set_design_func(new_spinbox, lv_spinbox_design);
+    /*The signal and design functions are not copied so set them here*/
+    lv_obj_set_signal_func(new_spinbox, lv_spinbox_signal);
+    lv_obj_set_design_func(new_spinbox, ancestor_design);        /*Leave the Text area's design function*/
 
-	/*Init the new spinbox spinbox*/
-	if(copy == NULL) {
+    /*Init the new spinbox spinbox*/
+    if(copy == NULL) {
+        /*Already inited above*/
+    }
+    /*Copy an existing spinbox*/
+    else {
+        lv_spinbox_ext_t * copy_ext = lv_obj_get_ext_attr(copy);
 
-	}
-	/*Copy an existing spinbox*/
-	else {
-		lv_spinbox_ext_t * copy_ext = lv_obj_get_ext_attr(copy);
+        lv_spinbox_set_value(new_spinbox, copy_ext->value);
+        lv_spinbox_set_digit_format(new_spinbox, copy_ext->digit_count, copy_ext->dec_point_pos);
+        lv_spinbox_set_range(new_spinbox, copy_ext->range_min, copy_ext->range_max);
+        lv_spinbox_set_step(new_spinbox, copy_ext->step);
 
-		/*Refresh the style with new signal function*/
-		lv_obj_refresh_style(new_spinbox);
-	}
+        /*Refresh the style with new signal function*/
+        lv_obj_refresh_style(new_spinbox);
+    }
 
-	lv_spinbox_updatevalue(new_spinbox);
+    lv_spinbox_updatevalue(new_spinbox);
 
-	LV_LOG_INFO("spinbox created");
+    LV_LOG_INFO("spinbox created");
 
-	return new_spinbox;
+    return new_spinbox;
 }
-
-
-void lv_spinbox_step_next(lv_obj_t * spinbox)
-{
-	lv_spinbox_ext_t * ext = lv_obj_get_ext_attr(spinbox);
-
-
-	if((ext->step / 10) < ext->rangeMax && (ext->step / 10) > ext->rangeMin && (ext->step / 10) > 0)
-	{
-		ext->step /= 10;
-	}
-
-	lv_spinbox_updatevalue(spinbox);
-}
-
-void lv_spinbox_step_previous(lv_obj_t * spinbox)
-{
-	lv_spinbox_ext_t * ext = lv_obj_get_ext_attr(spinbox);
-
-
-	if((ext->step * 10) <= ext->rangeMax && (ext->step * 10) > ext->rangeMin && (ext->step * 10) > 0)
-	{
-		ext->step *= 10;
-	}
-
-	lv_spinbox_updatevalue(spinbox);
-}
-
-/*======================
- * Add/remove functions
- *=====================*/
-
-/*
- * New object specific "add" or "remove" functions come here
- */
 
 
 /*=====================
  * Setter functions
  *====================*/
 
-/*
- * New object specific "set" functions come here
+/**
+ * Set spinbox value
+ * @param spinbox pointer to spinbox
+ * @param i value to be set
  */
-void lv_spinbox_set_double(const lv_obj_t * spinbox, double d)
+void lv_spinbox_set_value(const lv_obj_t * spinbox, int32_t i)
 {
-	lv_spinbox_ext_t * ext = lv_obj_get_ext_attr(spinbox);
-	if(ext == NULL)
-		return;
+    lv_spinbox_ext_t * ext = lv_obj_get_ext_attr(spinbox);
+    if(ext == NULL)
+        return;
+
+    if(i > ext->range_max)
+        i = ext->range_max;
+    if(i < ext->range_min)
+        i = ext->range_min;
+
+    ext->value = i;
+
+    lv_spinbox_updatevalue(spinbox);
 }
-
-void lv_spinbox_set_int(const lv_obj_t * spinbox, int32_t i)
-{
-	lv_spinbox_ext_t * ext = lv_obj_get_ext_attr(spinbox);
-	if(ext == NULL)
-		return;
-
-	if(i > ext->rangeMax)
-		i = ext->rangeMax;
-	if(i < ext->rangeMin)
-		i = ext->rangeMin;
-
-	ext->valueDigit = i;
-}
-
-void lv_spinbox_set_digit_format(const lv_obj_t * spinbox, uint8_t digit_count, uint8_t separator_position)
-{
-	lv_spinbox_ext_t * ext = lv_obj_get_ext_attr(spinbox);
-	if(ext == NULL)
-		return;
-
-	if(digit_count > LV_SPINBOX_MAX_DIGIT_COUNT)
-		digit_count = LV_SPINBOX_MAX_DIGIT_COUNT;
-
-	if(separator_position < LV_SPINBOX_MAX_DIGIT_COUNT)
-		separator_position = LV_SPINBOX_MAX_DIGIT_COUNT;
-
-	ext->digitCount = digit_count;
-	ext->decPointPos = separator_position;
-
-	lv_spinbox_updatevalue(spinbox);
-}
-
-void lv_spinbox_set_range_int(const lv_obj_t * spinbox, int32_t rangeMin, int32_t rangeMax)
-{
-	lv_spinbox_ext_t * ext = lv_obj_get_ext_attr(spinbox);
-	if(ext == NULL)
-		return;
-
-	ext->rangeMax = rangeMax;
-	ext->rangeMin = rangeMin;
-
-	if(ext->valueDigit > ext->rangeMax)
-	{
-		ext->valueDigit = ext->rangeMax;
-		lv_obj_invalidate(spinbox);
-	}
-	if(ext->valueDigit < ext->rangeMin)
-	{
-		ext->valueDigit = ext->rangeMin;
-		lv_obj_invalidate(spinbox);
-	}
-}
-
-void lv_spinbox_set_range_double(const lv_obj_t * spinbox, double rangeMin, double rangeMax)
-{
-	lv_spinbox_ext_t * ext = lv_obj_get_ext_attr(spinbox);
-	if(ext == NULL)
-		return;
-
-	double rMinDouble = lv_spinbox_double_to_int(spinbox, rangeMin);
-	double rMaxDouble = lv_spinbox_double_to_int(spinbox, rangeMax);
-
-	lv_spinbox_set_range_int(spinbox, rMinDouble, rMaxDouble);
-}
-
 
 /**
- * Set a style of a spinbox.
- * @param templ pointer to spinbox object
- * @param type which style should be set
- * @param style pointer to a style
+ * Set spinbox digit format (digit count and decimal format)
+ * @param spinbox pointer to spinbox
+ * @param digit_count number of digit excluding the decimal separator and the sign
+ * @param separator_position number of digit before the decimal point. If 0, decimal point is not shown
  */
-void lv_spinbox_set_style(lv_obj_t * spinbox, lv_spinbox_style_t type, lv_style_t * style)
+void lv_spinbox_set_digit_format(const lv_obj_t * spinbox, uint8_t digit_count, uint8_t separator_position)
 {
-	lv_spinbox_ext_t * ext = lv_obj_get_ext_attr(spinbox);
+    lv_spinbox_ext_t * ext = lv_obj_get_ext_attr(spinbox);
+    if(ext == NULL)
+        return;
 
-	switch(type) {
-	case LV_SPINBOX_STYLE_BG:
-		lv_page_set_style(spinbox, LV_PAGE_STYLE_BG, style);
-		break;
-	case LV_SPINBOX_STYLE_SB:
-		lv_page_set_style(spinbox, LV_PAGE_STYLE_SB, style);
-		break;
-	case LV_SPINBOX_STYLE_CURSOR:
-		ext->ta.cursor.style = style;
-		lv_obj_refresh_ext_size(lv_page_get_scrl(spinbox)); /*Refresh ext. size because of cursor drawing*/
-		break;
-	}
+    if(digit_count > LV_SPINBOX_MAX_DIGIT_COUNT)
+        digit_count = LV_SPINBOX_MAX_DIGIT_COUNT;
+
+    if(separator_position > LV_SPINBOX_MAX_DIGIT_COUNT)
+        separator_position = LV_SPINBOX_MAX_DIGIT_COUNT;
+
+    ext->digit_count = digit_count;
+    ext->dec_point_pos = separator_position;
+
+    lv_spinbox_updatevalue(spinbox);
+}
+
+/**
+ * Set spinbox step
+ * @param spinbox pointer to spinbox
+ * @param step steps on increment/decrement
+ */
+void lv_spinbox_set_step(const lv_obj_t * spinbox, uint32_t step)
+{
+    lv_spinbox_ext_t * ext = lv_obj_get_ext_attr(spinbox);
+    if(ext == NULL) return;
+
+    ext->step = step;
+}
+
+/**
+ * Set spinbox value range
+ * @param spinbox pointer to spinbox
+ * @param range_min maximum value, inclusive
+ * @param range_max minimum value, inclusive
+ */
+void lv_spinbox_set_range(const lv_obj_t * spinbox, int32_t range_min, int32_t range_max)
+{
+    lv_spinbox_ext_t * ext = lv_obj_get_ext_attr(spinbox);
+    if(ext == NULL) return;
+
+    ext->range_max = range_max;
+    ext->range_min = range_min;
+
+    if(ext->value > ext->range_max)
+    {
+        ext->value = ext->range_max;
+        lv_obj_invalidate(spinbox);
+    }
+    if(ext->value < ext->range_min)
+    {
+        ext->value = ext->range_min;
+        lv_obj_invalidate(spinbox);
+    }
+}
+
+/**
+ * Set spinbox callback on calue change
+ * @param spinbox pointer to spinbox
+ * @param cb Callback function called on value change event
+ */
+void lv_spinbox_set_value_changed_cb(const lv_obj_t * spinbox, lv_spinbox_value_changed_cb_t cb)
+{
+    lv_spinbox_ext_t * ext = lv_obj_get_ext_attr(spinbox);
+    ext->value_changed_cb = cb;
+}
+
+/**
+ * Set spinbox left padding in digits count (added between sign and first digit)
+ * @param spinbox pointer to spinbox
+ * @param cb Callback function called on value change event
+ */
+void lv_spinbox_set_padding_left(const lv_obj_t * spinbox, uint8_t padding)
+{
+    lv_spinbox_ext_t * ext = lv_obj_get_ext_attr(spinbox);
+    ext->digit_padding_left = padding;
+    lv_spinbox_updatevalue(spinbox);
 }
 
 /*=====================
  * Getter functions
  *====================*/
 
-/*
- * New object specific "get" functions come here
- */
-
 /**
- * Get style of a spinbox.
- * @param templ pointer to spinbox object
- * @param type which style should be get
- * @return style pointer to the style
+ * Get the spinbox numeral value (user has to convert to float according to its digit format)
+ * @param spinbox pointer to spinbox
+ * @return value integer value of the spinbox
  */
-lv_style_t * lv_spinbox_get_style(const lv_obj_t * templ, lv_spinbox_style_t type)
+int32_t lv_spinbox_get_value(const lv_obj_t * spinbox)
 {
-	lv_spinbox_ext_t * ext = lv_obj_get_ext_attr(templ);
+    lv_spinbox_ext_t * ext = lv_obj_get_ext_attr(spinbox);
 
-	switch(type) {
-	default:
-		return NULL;
-	}
-
-	/*To avoid warning*/
-	return NULL;
+    return ext->value;
 }
 
 /*=====================
  * Other functions
  *====================*/
 
-/*
- * New object specific "other" functions come here
+/**
+ * Select next lower digit for edition by dividing the step by 10
+ * @param spinbox pointer to spinbox
  */
+void lv_spinbox_step_next(lv_obj_t * spinbox)
+{
+    lv_spinbox_ext_t * ext = lv_obj_get_ext_attr(spinbox);
+
+
+    if((ext->step / 10) < ext->range_max && (ext->step / 10) > ext->range_min && (ext->step / 10) > 0)
+    {
+        ext->step /= 10;
+    }
+
+    lv_spinbox_updatevalue(spinbox);
+}
+
+/**
+ * Select next higher digit for edition by multiplying the step by 10
+ * @param spinbox pointer to spinbox
+ */
+void lv_spinbox_step_previous(lv_obj_t * spinbox)
+{
+    lv_spinbox_ext_t * ext = lv_obj_get_ext_attr(spinbox);
+
+
+    if((ext->step * 10) <= ext->range_max && (ext->step * 10) > ext->range_min && (ext->step * 10) > 0)
+    {
+        ext->step *= 10;
+    }
+
+    lv_spinbox_updatevalue(spinbox);
+}
+
+/**
+ * Increment spinbox value by one step
+ * @param spinbox pointer to spinbox
+ */
+void lv_spinbox_increment(lv_obj_t * spinbox)
+{
+    lv_spinbox_ext_t * ext = lv_obj_get_ext_attr(spinbox);
+
+    if(ext->value + ext->step <= ext->range_max)
+    {
+        /*Special mode when zero crossing*/
+        if((ext->value + ext->step) > 0 && ext->value < 0)
+        {
+            ext->value = -ext->value;
+        }/*end special mode*/
+        ext->value += ext->step;
+
+        if(ext->value_changed_cb != NULL)
+        {
+            ext->value_changed_cb(spinbox, ext->value);
+        }
+    }
+    lv_spinbox_updatevalue(spinbox);
+}
+
+/**
+ * Decrement spinbox value by one step
+ * @param spinbox pointer to spinbox
+ */
+void lv_spinbox_decrement(lv_obj_t * spinbox)
+{
+    lv_spinbox_ext_t * ext = lv_obj_get_ext_attr(spinbox);
+
+    if(ext->value - ext->step >= ext->range_min)
+    {
+        /*Special mode when zero crossing*/
+        if((ext->value - ext->step) < 0 && ext->value > 0)
+        {
+            ext->value = -ext->value;
+        }/*end special mode*/
+        ext->value -= ext->step;
+
+        if(ext->value_changed_cb != NULL)
+        {
+            ext->value_changed_cb(spinbox, ext->value);
+        }
+    }
+    lv_spinbox_updatevalue(spinbox);
+}
+
+
 
 /**********************
  *   STATIC FUNCTIONS
  **********************/
 
 /**
- * Handle the drawing related tasks of the spinboxs
- * @param templ pointer to an object
- * @param mask the object will be drawn only in this area
- * @param mode LV_DESIGN_COVER_CHK: only check if the object fully covers the 'mask_p' area
- *                                  (return 'true' if yes)
- *             LV_DESIGN_DRAW: draw the object (always return 'true')
- *             LV_DESIGN_DRAW_POST: drawing after every children are drawn
- * @param return true/false, depends on 'mode'
- */
-static bool lv_spinbox_design(lv_obj_t * templ, const lv_area_t * mask, lv_design_mode_t mode)
-{
-	/*Return false if the object is not covers the mask_p area*/
-	if(mode == LV_DESIGN_COVER_CHK) {
-		return false;
-	}
-	/*Draw the object*/
-	else if(mode == LV_DESIGN_DRAW_MAIN) {
-
-	}
-	/*Post draw when the children are drawn*/
-	else if(mode == LV_DESIGN_DRAW_POST) {
-
-	}
-
-	return true;
-}
-
-/**
  * Signal function of the spinbox
- * @param templ pointer to a spinbox object
+ * @param spinbox pointer to a spinbox object
  * @param sign a signal type from lv_signal_t enum
  * @param param pointer to a signal specific variable
  * @return LV_RES_OK: the object is not deleted in the function; LV_RES_INV: the object is deleted
@@ -328,184 +337,153 @@ static bool lv_spinbox_design(lv_obj_t * templ, const lv_area_t * mask, lv_desig
 static lv_res_t lv_spinbox_signal(lv_obj_t * spinbox, lv_signal_t sign, void * param)
 {
 
-	lv_spinbox_ext_t * ext = lv_obj_get_ext_attr(spinbox);
+    lv_spinbox_ext_t * ext = lv_obj_get_ext_attr(spinbox);
 
-	lv_res_t res;
+    lv_res_t res;
 
-	/* Include the ancient signal function */
-	if(sign != LV_SIGNAL_CONTROLL)
-	{
-		res = ancestor_signal(spinbox, sign, param);
-		if(res != LV_RES_OK) return res;
-	}
+    /* Include the ancient signal function */
+    if(sign != LV_SIGNAL_CONTROLL)
+    {
+        res = ancestor_signal(spinbox, sign, param);
+        if(res != LV_RES_OK) return res;
+    }
 
+    if(sign == LV_SIGNAL_CLEANUP) {
+        /*Nothing to cleanup. (No dynamically allocated memory in 'ext')*/
+    } else if(sign == LV_SIGNAL_GET_TYPE)
+    {
+        lv_obj_type_t * buf = param;
+        uint8_t i;
+        for(i = 0; i < LV_MAX_ANCESTOR_NUM - 1; i++)
+        {  /*Find the last set data*/
+            if(buf->type[i] == NULL) break;
+        }
+        buf->type[i] = "lv_spinbox";
+    }else if(sign == LV_SIGNAL_CONTROLL)
+    {
+        lv_hal_indev_type_t indev_type = lv_indev_get_type(lv_indev_get_act());
 
-	if(sign == LV_SIGNAL_CLEANUP) {
-		/*Nothing to cleanup. (No dynamically allocated memory in 'ext')*/
-	} else if(sign == LV_SIGNAL_GET_TYPE)
-	{
-		lv_obj_type_t * buf = param;
-		uint8_t i;
-		for(i = 0; i < LV_MAX_ANCESTOR_NUM - 1; i++)
-		{  /*Find the last set data*/
-			if(buf->type[i] == NULL) break;
-		}
-		buf->type[i] = "lv_spinbox";
-	}else if(sign == LV_SIGNAL_CONTROLL)
-	{
-		uint32_t c = *((uint32_t *)param);      /*uint32_t because can be UTF-8*/
-		if(c == LV_GROUP_KEY_RIGHT)
-		{
-			if(ext->valueDigit - ext->step >= ext->rangeMin)
-			{
-				//Special mode when zero crossing
-				if((ext->valueDigit - ext->step) < 0 && ext->valueDigit > 0)
-				{
-					ext->valueDigit = -ext->valueDigit;
-				}//end special mode
-
-				ext->valueDigit -= ext->step;
-			}
-
-			lv_spinbox_updatevalue(spinbox);
-			lv_label_set_text(ext->ta.label, (char*)ext->digits);
-		}
-		else if(c == LV_GROUP_KEY_LEFT)
-		{
-			if(ext->valueDigit + ext->step <= ext->rangeMax)
-			{
-				//Special mode when zero crossing
-				if((ext->valueDigit + ext->step) > 0 && ext->valueDigit < 0)
-				{
-					ext->valueDigit = -ext->valueDigit;
-				}//end special mode
-				ext->valueDigit += ext->step;
-			}
-			lv_spinbox_updatevalue(spinbox);
-			lv_label_set_text(ext->ta.label, (char*)ext->digits);
-		}
-		else if(c == LV_GROUP_KEY_UP)
-		{
-			lv_ta_cursor_up(spinbox);
-		}
-		else if(c == LV_GROUP_KEY_DOWN)
-		{
-			lv_ta_cursor_down(spinbox);
-		}
-		else
-		{
-			if(c == '\n')
-			{
-				int p = lv_ta_get_cursor_pos(spinbox);
-				if(p == ext->digitCount + 1)
-				{
-					for(int i = 0; i < ext->digitCount; i++)
-						lv_spinbox_step_previous(spinbox);
-				} else
-				{
-					lv_spinbox_step_next(spinbox);
-				}
+        uint32_t c = *((uint32_t *)param);      /*uint32_t because can be UTF-8*/
+        if(c == LV_GROUP_KEY_RIGHT)
+        {
+            if(indev_type == LV_INDEV_TYPE_ENCODER)
+            {
+                lv_spinbox_decrement(spinbox);
+            }
+            else
+            {
+                lv_spinbox_step_next(spinbox);
+            }
+        }
+        else if(c == LV_GROUP_KEY_LEFT)
+        {
+            if(indev_type == LV_INDEV_TYPE_ENCODER)
+            {
+                lv_spinbox_increment(spinbox);
+            }
+            else
+            {
+                lv_spinbox_step_previous(spinbox);
+            }
+        }
+        else if(c == LV_GROUP_KEY_UP)
+        {
+            lv_spinbox_increment(spinbox);
+        }
+        else if(c == LV_GROUP_KEY_DOWN)
+        {
+            lv_spinbox_decrement(spinbox);
+        }
+        else
+        {
+            if(c == LV_GROUP_KEY_ENTER)
+            {
+                int p = lv_ta_get_cursor_pos(spinbox);
+                if(p == (1 + ext->digit_padding_left + ext->digit_count))
+                {
+                    for(int i = 0; i < ext->digit_count; i++)
+                        lv_spinbox_step_previous(spinbox);
+                } else
+                {
+                    lv_spinbox_step_next(spinbox);
+                }
 
 
-				lv_spinbox_updatevalue(spinbox);
-				lv_label_set_text(ext->ta.label, (char*)ext->digits);
-			}
-			else
-			{
-				lv_ta_add_char(spinbox, c);
-			}
-		}
-	}
+                lv_spinbox_updatevalue(spinbox);
+            }
+            else
+            {
+                lv_ta_add_char(spinbox, c);
+            }
+        }
+    }
 
 
-	return res;
+    return res;
 }
 
 static void lv_spinbox_updatevalue(lv_obj_t * spinbox)
 {
-	lv_spinbox_ext_t * ext = lv_obj_get_ext_attr(spinbox);
-	int32_t v = ext->valueDigit;
-	int32_t intDigits, decDigits;
-	uint8_t dc = ext->digitCount;
+    lv_spinbox_ext_t * ext = lv_obj_get_ext_attr(spinbox);
+    int32_t v = ext->value;
+    int32_t intDigits, decDigits;
+    uint8_t dc = ext->digit_count;
 
-	intDigits = (ext->decPointPos==0)?ext->digitCount:ext->decPointPos;
-	decDigits = ext->digitCount - intDigits;
+    intDigits = (ext->dec_point_pos==0) ? ext->digit_count : ext->dec_point_pos;
+    decDigits = ext->digit_count - intDigits;
 
-	ext->digits[0] = v>=0?'+':'-';
+    ext->digits[0] = v>=0 ? '+' : '-';
 
-	int i = 0;
-	uint8_t digits[16];
+    int pl; /*padding left*/
+    for(pl = 0; pl < ext->digit_padding_left; pl++)
+    {
+        ext->digits[1 + pl] = ' ';
+    }
 
-	if(v < 0)
-		v = -v;
-	for(i = 0; i < dc; i++)
-	{
-		digits[i] = v%10;
-		v = v/10;
-	}
+    int i = 0;
+    uint8_t digits[16];
 
-	int k;
-	for(k = 0; k < intDigits; k++)
-	{
-		ext->digits[1 + k] = '0' + digits[--i];
-	}
+    if(v < 0)
+        v = -v;
+    for(i = 0; i < dc; i++)
+    {
+        digits[i] = v%10;
+        v = v/10;
+    }
 
-	ext->digits[1 + intDigits] = '.';
+    int k;
+    for(k = 0; k < intDigits; k++)
+    {
+        ext->digits[1 + pl + k] = '0' + digits[--i];
+    }
 
-	int d;
+    ext->digits[1 + pl + intDigits] = '.';
 
-	for(d = 0; d < decDigits; d++)
-	{
-		ext->digits[1 + intDigits + 1 + d] = '0' + digits[--i];
-	}
+    int d;
 
-	ext->digits[1 + intDigits + 1 + decDigits] = '\0';
+    for(d = 0; d < decDigits; d++)
+    {
+        ext->digits[1 + pl + intDigits + 1 + d] = '0' + digits[--i];
+    }
 
-	lv_label_set_text(ext->ta.label, (char*)ext->digits);
+    ext->digits[1 + pl + intDigits + 1 + decDigits] = '\0';
 
-	int32_t step = ext->step;
-	uint8_t cPos = ext->digitCount;
-	while(step >= 10)
-	{
-		step /= 10;
-		cPos--;
-	}
-	if(cPos > intDigits)
-	{
-		cPos ++;
-	}
+    lv_label_set_text(ext->ta.label, (char*)ext->digits);
 
-	lv_ta_set_cursor_pos(spinbox, cPos);
-}
+    int32_t step = ext->step;
+    uint8_t cPos = ext->digit_count + pl;
+    while(step >= 10)
+    {
+        step /= 10;
+        cPos--;
+    }
 
-static double lv_spinbox_int_to_double(lv_obj_t * spinbox, int32_t i)
-{
-	lv_spinbox_ext_t * ext = lv_obj_get_ext_attr(spinbox);
+    if(cPos > pl + intDigits )
+    {
+        cPos ++;
+    }
 
-	/*
-	if(i > ext->rangeMax)
-		i = ext->rangeMax;
-	if(i < ext->rangeMin)
-		i = ext->rangeMin;
-	*/
-
-	return (double)( i / (10 * (ext->digitCount - ext->decPointPos)));
-}
-
-static int32_t lv_spinbox_double_to_int(lv_obj_t * spinbox, double d)
-{
-	lv_spinbox_ext_t * ext = lv_obj_get_ext_attr(spinbox);
-
-	int32_t i = (int32_t)(d * (10 * (ext->digitCount - ext->decPointPos)));
-
-	/*
-	if(i > ext->rangeMax)
-		i = ext->rangeMax;
-	if(i < ext->rangeMin)
-		i = ext->rangeMin;
-	*/
-
-	return i;
+    lv_ta_set_cursor_pos(spinbox, cPos);
 }
 
 #endif
