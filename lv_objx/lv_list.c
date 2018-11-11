@@ -90,6 +90,7 @@ lv_obj_t * lv_list_create(lv_obj_t * par, const lv_obj_t * copy)
     ext->styles_btn[LV_BTN_STATE_INA] = &lv_style_btn_ina;
     ext->anim_time = LV_LIST_FOCUS_TIME;
 #if USE_LV_GROUP
+    ext->last_sel = NULL;
     ext->selected_btn = NULL;
 #endif
 
@@ -531,31 +532,40 @@ uint16_t lv_list_get_anim_time(const lv_obj_t * list)
  *  */
 lv_style_t * lv_list_get_style(const lv_obj_t * list, lv_list_style_t type)
 {
+    lv_style_t * style = NULL;
     lv_list_ext_t * ext = lv_obj_get_ext_attr(list);
 
     switch(type) {
         case LV_LIST_STYLE_BG:
-            return lv_page_get_style(list, LV_PAGE_STYLE_BG);
+            style = lv_page_get_style(list, LV_PAGE_STYLE_BG);
+            break;
         case LV_LIST_STYLE_SCRL:
-            return lv_page_get_style(list, LV_PAGE_STYLE_SB);
+            style = lv_page_get_style(list, LV_PAGE_STYLE_SB);
+            break;
         case LV_LIST_STYLE_SB:
-            return lv_page_get_style(list, LV_PAGE_STYLE_SCRL);
+            style = lv_page_get_style(list, LV_PAGE_STYLE_SCRL);
+            break;
         case LV_LIST_STYLE_BTN_REL:
-            return ext->styles_btn[LV_BTN_STATE_REL];
+            style = ext->styles_btn[LV_BTN_STATE_REL];
+            break;
         case LV_LIST_STYLE_BTN_PR:
-            return ext->styles_btn[LV_BTN_STATE_PR];
+            style = ext->styles_btn[LV_BTN_STATE_PR];
+            break;
         case LV_LIST_STYLE_BTN_TGL_REL:
-            return ext->styles_btn[LV_BTN_STATE_TGL_REL];
+            style = ext->styles_btn[LV_BTN_STATE_TGL_REL];
+            break;
         case LV_LIST_STYLE_BTN_TGL_PR:
-            return ext->styles_btn[LV_BTN_STATE_TGL_PR];
+            style = ext->styles_btn[LV_BTN_STATE_TGL_PR];
+            break;
         case LV_LIST_STYLE_BTN_INA:
-            return ext->styles_btn[LV_BTN_STATE_INA];
+            style = ext->styles_btn[LV_BTN_STATE_INA];
+            break;
         default:
-            return NULL;
+            style = NULL;
+            break;
     }
 
-    /*To avoid warning*/
-    return NULL;
+    return style;
 }
 /*=====================
  * Other functions
@@ -701,7 +711,15 @@ static lv_res_t lv_list_signal(lv_obj_t * list, lv_signal_t sign, void * param)
         if(indev_type == LV_INDEV_TYPE_ENCODER) {
             lv_group_t * g = lv_obj_get_group(list);
             if(lv_group_get_editing(g)) {
-                lv_list_set_btn_selected(list, lv_list_get_next_btn(list, NULL));
+                lv_list_ext_t * ext = lv_obj_get_ext_attr(list);
+                if(NULL != ext->last_sel) {
+                    /* Select the    last used button */
+                    lv_list_set_btn_selected(list, ext->last_sel);
+                }
+                else {
+                    /*Get the first button and mark it as selected*/
+                    lv_list_set_btn_selected(list, lv_list_get_next_btn(list, NULL));
+                }
             } else {
                 lv_list_set_btn_selected(list, NULL);
             }
@@ -712,8 +730,15 @@ static lv_res_t lv_list_signal(lv_obj_t * list, lv_signal_t sign, void * param)
             if(last_clicked_btn) {
                 lv_list_set_btn_selected(list, last_clicked_btn);
             } else {
-                /*Get the first button and mark it as selected*/
-                lv_list_set_btn_selected(list, lv_list_get_next_btn(list, NULL));
+                lv_list_ext_t * ext = lv_obj_get_ext_attr(list);
+                if(NULL != ext->last_sel) {
+                    /* Select the last used button */
+                    lv_list_set_btn_selected(list, ext->last_sel);
+                }
+                else {
+                    /*Get the first button and mark it as selected*/
+                    lv_list_set_btn_selected(list, lv_list_get_next_btn(list, NULL));
+                }
             }
         }
 #endif
@@ -767,6 +792,8 @@ static lv_res_t lv_list_signal(lv_obj_t * list, lv_signal_t sign, void * param)
             }
 
             if(btn != NULL) {
+                lv_list_ext_t * ext = lv_obj_get_ext_attr(list);
+                ext->last_sel = btn;
                 lv_action_t rel_action;
                 rel_action = lv_btn_get_action(btn, LV_BTN_ACTION_CLICK);
                 if(rel_action != NULL) rel_action(btn);
